@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Time zone overlap</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <div class="toolbar">
+        <div class="add-zone-bar">
+          <div class="tz-combobox">
+            <input
+              id="add-tz-input"
+              type="text"
+              list="timezone-options"
+              autocomplete="off"
+              placeholder="Add another time zone"
+            />
+            <input id="add-tz-value" type="hidden" />
+            <span class="combobox-arrow" aria-hidden="true">▾</span>
+          </div>
+          <button id="add-btn">Add</button>
+        </div>
+        <time id="live-clock" class="live-clock" aria-live="off"></time>
+      </div>
+
+      <div id="zone-chips" class="zone-chips"></div>
+
+      <div class="timeline-wrap">
+        <div id="timeline-matrix" class="timeline-matrix"></div>
+      </div>
+
+      <p id="overlap-summary" class="overlap-summary"></p>
+
+      <section class="translator-section">
+        <div class="translator-header">Time translator</div>
+        <div class="translator-input-row">
+          <input id="translate-time" type="time" value="12:00" class="translate-time-input" />
+          <span class="translator-label">in</span>
+          <div class="tz-combobox translator-tz-wrap">
+            <input
+              id="translate-tz-input"
+              type="text"
+              list="timezone-options"
+              autocomplete="off"
+              placeholder="Source timezone"
+            />
+            <input id="translate-tz-value" type="hidden" />
+            <span class="combobox-arrow" aria-hidden="true">▾</span>
+          </div>
+          <span class="translator-label">on</span>
+          <input id="translate-date" type="date" class="translate-date-input" />
+        </div>
+        <div id="translate-results" class="translate-results"></div>
+      </section>
+    </main>
+
+    <datalist id="timezone-options"></datalist>
+    <script src="./script.js"></script>
+  </body>
+</html>
