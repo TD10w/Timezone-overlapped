@@ -7,6 +7,7 @@ const zoneChipsEl      = document.querySelector("#zone-chips");
 const timelineEl       = document.querySelector("#timeline-matrix");
 const summaryEl        = document.querySelector("#overlap-summary");
 const tzOptions        = document.querySelector("#timezone-options");
+const addZoneFeedbackEl = document.querySelector("#add-zone-feedback");
 const translateTimeEl  = document.querySelector("#translate-time");
 const translateTzInput = document.querySelector("#translate-tz-input");
 const translateTzValue = document.querySelector("#translate-tz-value");
@@ -380,15 +381,25 @@ translateTzInput.addEventListener("change", () => { syncTimezoneInput(translateT
 
 function commitAddZone() {
   const tz = addTzValue.value;
-  if (!tz) return;
+  if (!tz) {
+    setAddZoneFeedback("Choose a valid city or timezone before adding it.", "error");
+    addTzInput.classList.add("is-invalid");
+    return;
+  }
+  if (zones.some((z) => z.timezone === tz)) {
+    setAddZoneFeedback(`${simplifyZoneLabel(tz)} is already on the board.`, "error");
+    addTzInput.classList.add("is-invalid");
+    return;
+  }
   addZone(tz);
   addTzInput.value = "";
   addTzValue.value = "";
+  addTzInput.classList.remove("is-invalid");
+  setAddZoneFeedback(`${simplifyZoneLabel(tz)} added.`, "success");
 }
 
 // ─── Zone management ──────────────────────────────────────────────────────────
 function addZone(timezone) {
-  if (zones.some((z) => z.timezone === timezone)) return;
   zones.push({ id: nextId++, timezone, start: "09:00", end: "17:00", isHighlighted: true });
   render();
 }
@@ -836,6 +847,10 @@ function syncTimezoneInput(visibleInput, hiddenInput, shouldCommitLabel) {
 
   if (!normalized) {
     hiddenInput.value = "";
+    if (visibleInput === addTzInput) {
+      addTzInput.classList.remove("is-invalid");
+      setAddZoneFeedback("", "neutral");
+    }
     return;
   }
 
@@ -845,6 +860,7 @@ function syncTimezoneInput(visibleInput, hiddenInput, shouldCommitLabel) {
     if (offsetMatch) {
       if (shouldCommitLabel) visibleInput.value = offsetMatch.label;
       hiddenInput.value = offsetMatch.timeZone;
+      handleResolvedTimezoneInput(visibleInput, offsetMatch.timeZone);
       return;
     }
   }
@@ -855,6 +871,7 @@ function syncTimezoneInput(visibleInput, hiddenInput, shouldCommitLabel) {
     if (aliasMatch) {
       if (shouldCommitLabel) visibleInput.value = aliasMatch.label;
       hiddenInput.value = aliasMatch.timeZone;
+      handleResolvedTimezoneInput(visibleInput, aliasMatch.timeZone);
       return;
     }
   }
@@ -866,6 +883,7 @@ function syncTimezoneInput(visibleInput, hiddenInput, shouldCommitLabel) {
   if (exactMatch) {
     if (shouldCommitLabel) visibleInput.value = exactMatch.label;
     hiddenInput.value = exactMatch.timeZone;
+    handleResolvedTimezoneInput(visibleInput, exactMatch.timeZone);
     return;
   }
 
@@ -873,10 +891,27 @@ function syncTimezoneInput(visibleInput, hiddenInput, shouldCommitLabel) {
   if (shouldCommitLabel && prefixMatches.length === 1) {
     visibleInput.value = prefixMatches[0].label;
     hiddenInput.value = prefixMatches[0].timeZone;
+    handleResolvedTimezoneInput(visibleInput, prefixMatches[0].timeZone);
     return;
   }
 
   hiddenInput.value = "";
+  if (visibleInput === addTzInput) {
+    addTzInput.classList.add("is-invalid");
+    setAddZoneFeedback("Not matched yet. Try a city, country, or GMT offset.", "error");
+  }
+}
+
+function handleResolvedTimezoneInput(visibleInput, timezone) {
+  if (visibleInput !== addTzInput) return;
+  addTzInput.classList.remove("is-invalid");
+  setAddZoneFeedback(`Ready to add ${simplifyZoneLabel(timezone)}.`, "success");
+}
+
+function setAddZoneFeedback(message, type) {
+  if (!addZoneFeedbackEl) return;
+  addZoneFeedbackEl.textContent = message;
+  addZoneFeedbackEl.className = `input-feedback${type === "error" ? " is-error" : type === "success" ? " is-success" : ""}`;
 }
 
 function normalizeLookupValue(value) {

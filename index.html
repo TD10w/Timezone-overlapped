@@ -8,6 +8,36 @@
   </head>
   <body>
     <main class="page-shell">
+      <section class="hero-banner">
+        <div class="hero-copy">
+          <div class="page-kicker">Global Meeting Planner</div>
+          <h1>Find the hours that actually work across time zones.</h1>
+          <p class="hero-text">
+            Add cities, set each person’s working window, and instantly see the shared
+            overlap without doing timezone math in your head.
+          </p>
+          <div class="hero-points" aria-hidden="true">
+            <span>Live local clock</span>
+            <span>Overlap-first timeline</span>
+            <span>Built-in time translator</span>
+          </div>
+        </div>
+        <div class="hero-card" aria-hidden="true">
+          <div class="hero-card-label">Today’s sweet spot</div>
+          <div class="hero-card-time">09:00-12:00</div>
+          <div class="hero-card-meta">Shared hours update as you edit the cities below.</div>
+        </div>
+      </section>
+
+      <section class="page-header">
+        <h2>Build your overlap board</h2>
+        <p>
+          Start with your local time, add the cities you care about, and adjust each
+          person’s working window. The grid highlights the hours that work for everyone
+          you have turned on.
+        </p>
+      </section>
+
       <div class="toolbar">
         <div class="add-zone-bar">
           <div class="tz-combobox">
@@ -25,6 +55,7 @@
         </div>
         <time id="live-clock" class="live-clock" aria-live="off"></time>
       </div>
+      <p id="add-zone-feedback" class="input-feedback" aria-live="polite"></p>
 
       <div id="zone-chips" class="zone-chips"></div>
 
@@ -34,27 +65,32 @@
 
       <p id="overlap-summary" class="overlap-summary"></p>
 
-      <section class="translator-section">
-        <div class="translator-header">Time translator</div>
-        <div class="translator-input-row">
-          <input id="translate-time" type="time" value="12:00" class="translate-time-input" />
-          <span class="translator-label">in</span>
-          <div class="tz-combobox translator-tz-wrap">
-            <input
-              id="translate-tz-input"
-              type="text"
-              list="timezone-options"
-              autocomplete="off"
-              placeholder="Source timezone"
-            />
-            <input id="translate-tz-value" type="hidden" />
-            <span class="combobox-arrow" aria-hidden="true">▾</span>
+      <details class="translator-section">
+        <summary class="translator-summary">
+          <span class="translator-header">Time translator</span>
+          <span class="translator-summary-copy">Convert one exact time across the visible zones</span>
+        </summary>
+        <div class="translator-body">
+          <div class="translator-input-row">
+            <input id="translate-time" type="time" value="12:00" class="translate-time-input" />
+            <span class="translator-label">in</span>
+            <div class="tz-combobox translator-tz-wrap">
+              <input
+                id="translate-tz-input"
+                type="text"
+                list="timezone-options"
+                autocomplete="off"
+                placeholder="Source timezone"
+              />
+              <input id="translate-tz-value" type="hidden" />
+              <span class="combobox-arrow" aria-hidden="true">▾</span>
+            </div>
+            <span class="translator-label">on</span>
+            <input id="translate-date" type="date" class="translate-date-input" />
           </div>
-          <span class="translator-label">on</span>
-          <input id="translate-date" type="date" class="translate-date-input" />
+          <div id="translate-results" class="translate-results"></div>
         </div>
-        <div id="translate-results" class="translate-results"></div>
-      </section>
+      </details>
     </main>
 
     <datalist id="timezone-options"></datalist>
