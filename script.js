@@ -3,6 +3,7 @@ const addTzInput       = document.querySelector("#add-tz-input");
 const addTzValue       = document.querySelector("#add-tz-value");
 const addBtn           = document.querySelector("#add-btn");
 const liveClockEl      = document.querySelector("#live-clock");
+const liveDateEl       = document.querySelector("#live-date");
 const zoneChipsEl      = document.querySelector("#zone-chips");
 const timelineEl       = document.querySelector("#timeline-matrix");
 const summaryEl        = document.querySelector("#overlap-summary");
@@ -584,6 +585,9 @@ function startClock() {
 function tick() {
   const now = new Date();
   liveClockEl.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  if (liveDateEl) {
+    liveDateEl.textContent = now.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  }
 
   // Update chip times + icons every second (cheap DOM writes)
   const localChip = document.querySelector(".zone-chip-local");

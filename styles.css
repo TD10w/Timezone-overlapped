@@ -41,6 +41,86 @@ body {
   gap: 20px;
 }
 
+/* ─── App headline ─────────────────────────────────────────────────────────── */
+.app-headline {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 2px;
+}
+
+.app-title {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.app-title-accent {
+  color: var(--accent);
+}
+
+.app-subtitle {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-top: 8px;
+  letter-spacing: 0.01em;
+  max-width: 480px;
+}
+
+.headline-clock-group {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.live-date {
+  font-size: 0.75rem;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+  margin-top: 4px;
+}
+
+/* ─── Legend ───────────────────────────────────────────────────────────────── */
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 4px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.legend-sep {
+  color: var(--bg-3);
+  font-size: 0.9rem;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.legend-swatch--work {
+  background: rgba(245, 158, 11, 0.28);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+}
+
+.legend-swatch--overlap {
+  background: rgba(74, 182, 97, 0.32);
+  border: 1px solid rgba(74, 182, 97, 0.55);
+}
+
 /* ─── Topbar ───────────────────────────────────────────────────────────────── */
 .topbar {
   display: flex;
@@ -52,15 +132,6 @@ body {
   border-radius: 10px;
 }
 
-.topbar-brand {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  margin-right: 4px;
-}
 
 /* ─── Toolbar ──────────────────────────────────────────────────────────────── */
 .toolbar {
@@ -76,7 +147,6 @@ body {
   gap: 8px;
   flex: 1;
   min-width: 0;
-  max-width: 560px;
 }
 
 .tz-combobox {
@@ -536,14 +606,18 @@ button#add-btn:focus {
     gap: 14px;
   }
 
-  .hero-banner {
-    grid-template-columns: 1fr;
-    padding: 20px 18px;
+  .app-headline {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
   }
 
-  .hero-banner h1 {
-    max-width: none;
-    font-size: 2.3rem;
+  .headline-clock-group {
+    text-align: left;
+  }
+
+  .app-title {
+    font-size: 1.7rem;
   }
 
   .live-clock {

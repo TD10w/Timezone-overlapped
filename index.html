@@ -8,8 +8,18 @@
   </head>
   <body>
     <main class="page-shell">
+      <div class="app-headline">
+        <div class="app-title-group">
+          <h1 class="app-title">Timezone<span class="app-title-accent"> Overlap</span></h1>
+          <p class="app-subtitle">Find shared working hours across the world</p>
+        </div>
+        <div class="headline-clock-group">
+          <time id="live-clock" class="live-clock" aria-live="off"></time>
+          <p id="live-date" class="live-date"></p>
+        </div>
+      </div>
+
       <header class="topbar">
-        <span class="topbar-brand">Timezone Overlap</span>
         <div class="add-zone-bar">
           <div class="tz-combobox">
             <input
@@ -24,10 +34,21 @@
           </div>
           <button id="add-btn">Add</button>
         </div>
-        <time id="live-clock" class="live-clock" aria-live="off"></time>
       </header>
 
       <div id="zone-chips" class="zone-chips"></div>
+
+      <div class="legend">
+        <span class="legend-item">
+          <span class="legend-swatch legend-swatch--work"></span>
+          Work hours
+        </span>
+        <span class="legend-sep">·</span>
+        <span class="legend-item">
+          <span class="legend-swatch legend-swatch--overlap"></span>
+          Overlap window
+        </span>
+      </div>
 
       <div class="timeline-wrap">
         <div id="timeline-matrix" class="timeline-matrix"></div>
