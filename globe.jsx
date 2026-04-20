@@ -131,6 +131,7 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
   const [hoverCoord, setHoverCoord] = useState(null);
   const [hoverPx, setHoverPx] = useState(null); // cursor screen pos for tooltip
   const dragRef = useRef(null);
+  const hoverRef = useRef(false);
   const autoSpinRef = useRef(rotationMode === "spin");
   const spinResumeTimerRef = useRef(null);
   const svgRef = useRef(null);
@@ -211,7 +212,7 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
     const loop = (t) => {
       const dt = t - last;
       last = t;
-      if (autoSpinRef.current && !dragRef.current) {
+      if (autoSpinRef.current && !dragRef.current && !hoverRef.current) {
         setRotation((r) => ({ ...r, lambda: r.lambda - dt * 0.008 }));
       }
       raf = requestAnimationFrame(loop);
@@ -233,6 +234,7 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
     autoSpinRef.current = false;
   };
   const onPointerMove = (e) => {
+    hoverRef.current = true;
     const rect = svgRef.current.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
@@ -289,7 +291,7 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
     if (onPin) onPin(city);
     deferSpinResume(2000);
   };
-  const onPointerLeave = () => { setHoverCoord(null); setHoverPx(null); };
+  const onPointerLeave = () => { hoverRef.current = false; setHoverCoord(null); setHoverPx(null); };
 
   // Subsolar point & night hemisphere center
   const sub = useMemo(() => subsolarPoint(now), [now]);
