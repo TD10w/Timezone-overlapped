@@ -267,9 +267,8 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
 
-    // Iterate over projected pins; if within 14px of one, unpin it (skip local)
+    // Iterate over projected pins; if within 14px of one, unpin it
     for (const pin of pins) {
-      if (pin.id === "local") continue;
       const p = project(pin.lon, pin.lat, rotation, radius, cx, cy);
       if (!p.visible) continue;
       const dd = Math.hypot(p.x - sx, p.y - sy);

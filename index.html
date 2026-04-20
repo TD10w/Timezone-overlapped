@@ -858,6 +858,7 @@
           catch { return { ...TWEAK_DEFAULTS }; }
         });
         const [focusTarget, setFocusTarget] = useState(null);
+        const [localHidden, setLocalHidden] = useState(false);
         const [, forceTick] = useState(0);
         const [now, setNow] = useState(() => new Date());
         const localTz = React.useMemo(
@@ -909,7 +910,7 @@
           lat: localCity.lat, lon: localCity.lon, isHighlighted: true,
         } : null;
 
-        const globePins = localPin ? [localPin, ...pins] : pins;
+        const globePins = (localPin && !localHidden) ? [localPin, ...pins] : pins;
 
         const onPin = (city) => { addZoneFromPin(city.tz); };
 
@@ -927,7 +928,7 @@
               size={460}
               pins={globePins}
               onPin={onPin}
-              onUnpin={(pin) => removeZoneByTz(pin.tz)}
+              onUnpin={(pin) => pin.id === "local" ? setLocalHidden(true) : removeZoneByTz(pin.tz)}
               localTz={localTz}
               style={tweaks.style}
               rotationMode={tweaks.rotationMode}
