@@ -114,7 +114,7 @@ function ringToPath(ring, rotation, radius, cx, cy) {
 }
 
 // ── Main Globe component ───────────────────────────────────────────────────
-function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoDensity }) {
+function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoDensity, focusTarget }) {
   const radius = size / 2 - 14;
   const cx = size / 2;
   const cy = size / 2;
@@ -129,10 +129,22 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
   });
   const [now, setNow] = useState(() => new Date());
   const [hoverCoord, setHoverCoord] = useState(null);
+  const [hoverPx, setHoverPx] = useState(null); // cursor screen pos for tooltip
   const dragRef = useRef(null);
   const autoSpinRef = useRef(rotationMode === "spin");
   const spinResumeTimerRef = useRef(null);
   const svgRef = useRef(null);
+
+  // Track which pin IDs are newly added this render — animate those
+  const prevPinIdsRef = useRef(new Set());
+  const newPinIds = useMemo(() => {
+    const prev = prevPinIdsRef.current;
+    const cur = new Set(pins.map(p => p.id));
+    const added = new Set();
+    cur.forEach(id => { if (!prev.has(id)) added.add(id); });
+    prevPinIdsRef.current = cur;
+    return added;
+  }, [pins]);
 
   const deferSpinResume = (ms = 2000) => {
     if (rotationMode !== "spin") return;
@@ -143,6 +155,46 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
       spinResumeTimerRef.current = null;
     }, ms);
   };
+
+  // Animate rotation to a target lon/lat (used by search-to-pin)
+  const animRef = useRef(null);
+  const animateTo = useCallback((targetLon, targetLat) => {
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+    // Pause auto-spin while animating
+    autoSpinRef.current = false;
+    if (spinResumeTimerRef.current) clearTimeout(spinResumeTimerRef.current);
+
+    const startLambda = rotation.lambda;
+    const startPhi = rotation.phi;
+    // Wrap shortest path for lambda
+    let endLambda = -targetLon;
+    let delta = endLambda - startLambda;
+    delta = ((delta + 180) % 360 + 360) % 360 - 180;
+    endLambda = startLambda + delta;
+    const endPhi = Math.max(-70, Math.min(70, -targetLat));
+
+    const duration = 800;
+    const t0 = performance.now();
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / duration);
+      // easeInOutCubic
+      const e = k < 0.5 ? 4*k*k*k : 1 - Math.pow(-2*k + 2, 3) / 2;
+      setRotation({
+        lambda: startLambda + (endLambda - startLambda) * e,
+        phi: startPhi + (endPhi - startPhi) * e,
+      });
+      if (k < 1) animRef.current = requestAnimationFrame(step);
+      else { animRef.current = null; deferSpinResume(2000); }
+    };
+    animRef.current = requestAnimationFrame(step);
+  }, [rotation.lambda, rotation.phi]);
+
+  // Respond to external focus requests (search)
+  useEffect(() => {
+    if (!focusTarget) return;
+    animateTo(focusTarget.lon, focusTarget.lat);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusTarget && focusTarget.key]);
 
   // Tick clock
   useEffect(() => {
@@ -186,6 +238,7 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
     const sy = e.clientY - rect.top;
     const c = unproject(sx, sy, rotation, radius, cx, cy);
     setHoverCoord(c);
+    setHoverPx({ x: sx, y: sy });
 
     if (dragRef.current) {
       const dx = e.clientX - dragRef.current.startX;
@@ -237,7 +290,7 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
     if (onPin) onPin(city);
     deferSpinResume(2000);
   };
-  const onPointerLeave = () => { setHoverCoord(null); };
+  const onPointerLeave = () => { setHoverCoord(null); setHoverPx(null); };
 
   // Subsolar point & night hemisphere center
   const sub = useMemo(() => subsolarPoint(now), [now]);
@@ -297,6 +350,14 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
 
   // Hover city preview (nearest)
   const hoverCity = hoverCoord ? nearestCity(hoverCoord.lat, hoverCoord.lon) : null;
+  const hoverCityTime = useMemo(() => {
+    if (!hoverCity) return null;
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        hour: "2-digit", minute: "2-digit", timeZone: hoverCity.tz, hour12: false,
+      }).format(now);
+    } catch { return null; }
+  }, [hoverCity, now]);
 
   // Style modifiers
   const isFilled = style === "filled";
@@ -420,12 +481,20 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
           if (!pin.visible) return null;
           const isHighlight = pin.isHighlighted !== false;
           const color = isHighlight ? "#f59e0b" : "#7a7a80";
+          const isNew = newPinIds.has(pin.id);
           return (
-            <g key={pin.id} pointerEvents="none">
+            <g key={pin.id} pointerEvents="none" className={isNew ? "globe-pin globe-pin-new" : "globe-pin"}>
+              {/* Ripple (only on new pins) */}
+              {isNew && (
+                <>
+                  <circle cx={pin.x} cy={pin.y} r="4" fill="none" stroke={color} strokeWidth="1.5" className="globe-pin-ripple" />
+                  <circle cx={pin.x} cy={pin.y} r="4" fill="none" stroke={color} strokeWidth="1" className="globe-pin-ripple globe-pin-ripple-2" />
+                </>
+              )}
               {/* halo */}
-              <circle cx={pin.x} cy={pin.y} r="8" fill={color} opacity="0.15" />
-              <circle cx={pin.x} cy={pin.y} r="4" fill={color} opacity="0.35" />
-              <circle cx={pin.x} cy={pin.y} r="2.2" fill={color} stroke="#1c1c1e" strokeWidth="0.5" />
+              <circle cx={pin.x} cy={pin.y} r="8" fill={color} opacity="0.15" className="globe-pin-halo" />
+              <circle cx={pin.x} cy={pin.y} r="4" fill={color} opacity="0.35" className="globe-pin-halo" />
+              <circle cx={pin.x} cy={pin.y} r="2.2" fill={color} stroke="#1c1c1e" strokeWidth="0.5" className="globe-pin-dot" />
               <text
                 x={pin.x + 8}
                 y={pin.y - 6}
@@ -433,6 +502,7 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
                 fill={color}
                 fontFamily="SFMono-Regular, Menlo, monospace"
                 style={{ textShadow: "0 0 3px #1c1c1e, 0 0 3px #1c1c1e" }}
+                className="globe-pin-label"
               >
                 {pin.label}
               </text>
@@ -471,6 +541,21 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
           <span className="hud-val hud-city">{hoverCity ? hoverCity.name : "—"}</span>
         </div>
       </div>
+
+      {/* Hover tooltip (city + local time there) */}
+      {hoverCity && hoverPx && !dragRef.current && (
+        <div
+          className="globe-tooltip"
+          style={{
+            left: Math.min(size - 140, Math.max(4, hoverPx.x + 14)),
+            top: Math.max(4, hoverPx.y - 44),
+          }}
+        >
+          <div className="globe-tooltip-city">{hoverCity.name}</div>
+          <div className="globe-tooltip-time">{hoverCityTime}</div>
+          <div className="globe-tooltip-hint">click to pin</div>
+        </div>
+      )}
     </div>
   );
 }
