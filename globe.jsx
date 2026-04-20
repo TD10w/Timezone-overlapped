@@ -460,14 +460,23 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
           )}
         </g>
 
-        {/* Subsolar marker (sun symbol) */}
+        {/* Subsolar marker — sun rays so it's clearly not a pin */}
         {(() => {
           const sp = project(sub.lon, sub.lat, rotation, radius, cx, cy);
           if (!sp.visible) return null;
+          const rays = [0,45,90,135,180,225,270,315].map(deg => {
+            const rad = deg * Math.PI / 180;
+            const x1 = sp.x + Math.cos(rad) * 5.5;
+            const y1 = sp.y + Math.sin(rad) * 5.5;
+            const x2 = sp.x + Math.cos(rad) * 8.5;
+            const y2 = sp.y + Math.sin(rad) * 8.5;
+            return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(245,158,11,0.5)" strokeWidth="1.2" strokeLinecap="round" />;
+          });
           return (
             <g pointerEvents="none">
-              <circle cx={sp.x} cy={sp.y} r={6} fill="none" stroke="rgba(245,158,11,0.35)" strokeWidth="1" />
-              <circle cx={sp.x} cy={sp.y} r={2.2} fill="#f59e0b" />
+              {rays}
+              <circle cx={sp.x} cy={sp.y} r={4} fill="rgba(245,158,11,0.25)" />
+              <circle cx={sp.x} cy={sp.y} r={2.5} fill="#f59e0b" opacity="0.85" />
             </g>
           );
         })()}
