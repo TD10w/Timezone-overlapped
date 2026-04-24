@@ -118,7 +118,7 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
   const radius = size / 2 - 14;
   const cx = size / 2;
   const cy = size / 2;
-  const defaultPhi = -25;
+  const defaultPhi = 0;
 
   const [rotation, setRotation] = useState(() => {
     if (rotationMode === "centered") {
