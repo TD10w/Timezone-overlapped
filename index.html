@@ -22,6 +22,9 @@
       @media (max-width: 900px) {
         .globe-stage { grid-template-columns: 1fr; }
       }
+      @media (max-width: 520px) {
+        .globe-stage { padding: 14px; }
+      }
 
       .globe-panel {
         display: flex;
@@ -32,10 +35,20 @@
 
       .globe-wrap {
         position: relative;
+        width: 100%;
+        max-width: 460px;
+        aspect-ratio: 1;
       }
       .globe-wrap svg {
         display: block;
+        width: 100%;
+        height: 100%;
         user-select: none;
+      }
+      .globe-wrap svg:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 4px;
+        border-radius: 50%;
       }
 
       .globe-hud {
@@ -98,6 +111,14 @@
         height: 460px;
         overflow-y: auto;
         padding-right: 4px;
+      }
+      @media (max-width: 900px) {
+        .pin-panel {
+          height: auto;
+          max-height: none;
+          overflow: visible;
+          padding-right: 0;
+        }
       }
       .pin-panel::-webkit-scrollbar { width: 6px; }
       .pin-panel::-webkit-scrollbar-thumb {
@@ -207,6 +228,10 @@
         transition: color 150ms;
       }
       .pin-card .pc-remove:hover { color: #f87171; }
+      .pin-card .pc-remove:focus-visible {
+        outline: 2px solid var(--accent-dim);
+        outline-offset: 2px;
+      }
 
       .pin-empty {
         text-align: center;
@@ -464,13 +489,15 @@
       <header class="topbar">
         <div class="add-zone-bar">
           <div class="tz-combobox">
-            <input id="add-tz-input" type="text" list="timezone-options" autocomplete="off" placeholder="Or type a city…" />
+            <label class="sr-only" for="add-tz-input">City or timezone to add</label>
+            <input id="add-tz-input" type="text" list="timezone-options" autocomplete="off" placeholder="Or type a city…" aria-describedby="add-zone-feedback" />
             <input id="add-tz-value" type="hidden" />
             <span class="combobox-arrow" aria-hidden="true">▾</span>
           </div>
           <button id="add-btn">Add</button>
         </div>
       </header>
+      <p id="add-zone-feedback" class="input-feedback" aria-live="polite"></p>
 
       <div class="section-divider">Overlap Board</div>
 
@@ -515,14 +542,17 @@
         </summary>
         <div class="translator-body">
           <div class="translator-input-row">
+            <label class="sr-only" for="translate-time">Time to translate</label>
             <input id="translate-time" type="time" value="12:00" class="translate-time-input" />
             <span class="translator-label">in</span>
             <div class="tz-combobox translator-tz-wrap">
+              <label class="sr-only" for="translate-tz-input">Source timezone</label>
               <input id="translate-tz-input" type="text" list="timezone-options" autocomplete="off" placeholder="Source timezone" />
               <input id="translate-tz-value" type="hidden" />
               <span class="combobox-arrow" aria-hidden="true">▾</span>
             </div>
             <span class="translator-label">on</span>
+            <label class="sr-only" for="translate-date">Date to translate</label>
             <input id="translate-date" type="date" class="translate-date-input" />
           </div>
           <div id="translate-results" class="translate-results"></div>
@@ -576,81 +606,20 @@
     <!-- original overlap-board script -->
     <script src="./script.js"></script>
 
-    <!-- Bridge: expose zones/addZone/removeZone on window.__tzBridge by reading #zone-chips DOM -->
+    <!-- Bridge: keep the React globe in sync with the overlap-board state -->
     <script>
       (function() {
-        const origAdd = window.addZone;
-        const origRemove = window.removeZone;
         window.__tzBridge = {
-          zones: [],
+          zones: typeof window.getTimezoneZones === "function" ? window.getTimezoneZones() : [],
           version: 0,
           subs: new Set(),
           bump() { this.version++; this.subs.forEach(fn => { try { fn(); } catch(e) {} }); },
           subscribe(fn) { this.subs.add(fn); return () => this.subs.delete(fn); },
         };
-        if (typeof origAdd === "function") {
-          window.addZone = function(tz) {
-            const ret = origAdd.apply(this, arguments);
-            if (!window.__tzBridge.zones.some(z => z.timezone === tz)) {
-              window.__tzBridge.zones.push({
-                id: window.__tzBridge.zones.length
-                     ? Math.max(...window.__tzBridge.zones.map(z=>z.id))+1
-                     : 0,
-                timezone: tz,
-                isHighlighted: true,
-              });
-            }
-            window.__tzBridge.bump();
-            return ret;
-          };
-        }
-        if (typeof origRemove === "function") {
-          window.removeZone = function(id) {
-            const before = new Set([...document.querySelectorAll("#zone-chips .zone-chip:not(.zone-chip-local) .chip-city")].map(n=>n.textContent));
-            const ret = origRemove.apply(this, arguments);
-            requestAnimationFrame(() => {
-              const after = new Set([...document.querySelectorAll("#zone-chips .zone-chip:not(.zone-chip-local) .chip-city")].map(n=>n.textContent));
-              const removedLabel = [...before].find(x => !after.has(x));
-              if (removedLabel) {
-                window.__tzBridge.zones = window.__tzBridge.zones.filter(z => {
-                  const label = z.timezone.split("/").pop().replace(/_/g, " ");
-                  return label !== removedLabel;
-                });
-              }
-              window.__tzBridge.bump();
-            });
-            return ret;
-          };
-        }
-        // Initial sync from DOM chips
-        (function initialSync() {
-          const chips = [...document.querySelectorAll("#zone-chips .zone-chip:not(.zone-chip-local) .chip-city")];
-          const labels = chips.map(n => n.textContent);
-          const opts = [...document.querySelectorAll("#timezone-options option")].map(o=>o.value);
-          labels.forEach((label, i) => {
-            const match = opts.find(v => v.startsWith(label + " ") || v.startsWith(label + " -"));
-            const tz = match ? (match.split(" - ").pop() || label) : null;
-            if (tz && !window.__tzBridge.zones.some(z => z.timezone === tz)) {
-              window.__tzBridge.zones.push({ id: i, timezone: tz, isHighlighted: true });
-            }
-          });
+        window.addEventListener("timezone-zones-changed", (event) => {
+          window.__tzBridge.zones = event.detail || [];
           window.__tzBridge.bump();
-        })();
-
-        // Observe chip highlight toggles
-        const chipsEl = document.getElementById("zone-chips");
-        if (chipsEl) {
-          new MutationObserver(() => {
-            const chips = [...chipsEl.querySelectorAll(".zone-chip:not(.zone-chip-local)")];
-            chips.forEach((chip) => {
-              const label = chip.querySelector(".chip-city")?.textContent;
-              if (!label) return;
-              const mirror = window.__tzBridge.zones.find(z => z.timezone.split("/").pop().replace(/_/g," ") === label);
-              if (mirror) mirror.isHighlighted = !chip.classList.contains("is-dim");
-            });
-            window.__tzBridge.bump();
-          }).observe(chipsEl, { subtree: true, attributes: true, attributeFilter: ["class"], childList: true });
-        }
+        });
       })();
     </script>
 
@@ -671,13 +640,7 @@
         if (typeof window.addZone === "function") window.addZone(tz);
       }
       function removeZoneByTz(tz) {
-        const label = tz.split("/").pop().replace(/_/g, " ");
-        const chips = document.querySelectorAll("#zone-chips .zone-chip:not(.zone-chip-local)");
-        chips.forEach((chip) => {
-          if (chip.querySelector(".chip-city")?.textContent === label) {
-            chip.querySelector(".chip-remove")?.click();
-          }
-        });
+        if (typeof window.removeZoneByTimezone === "function") window.removeZoneByTimezone(tz);
       }
 
       function simplify(tz) {
@@ -727,7 +690,7 @@
         return (
           <div className={`pin-card${isLocal ? " is-local" : ""}${pin.isHighlighted === false ? " is-dim" : ""}`}>
             {!isLocal && (
-              <button className="pc-remove" onClick={() => onRemove(pin.tz)} title="Remove">×</button>
+              <button className="pc-remove" onClick={() => onRemove(pin.tz)} title={`Remove ${pin.label}`} aria-label={`Remove ${pin.label}`}>×</button>
             )}
             <div className="pc-top">
               <span>{isLocal ? "LOCAL" : "PINNED"}</span>
@@ -817,6 +780,12 @@
               ref={inputRef}
               className="globe-search-input"
               placeholder="Search a city to pin…"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={open && query.trim() ? "true" : "false"}
+              aria-controls="globe-search-results"
+              aria-activedescendant={open && results[activeIdx] ? `globe-search-result-${activeIdx}` : undefined}
+              aria-label="Search a city to pin"
               value={query}
               onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
               onFocus={() => setOpen(true)}
@@ -824,7 +793,7 @@
               onKeyDown={onKeyDown}
             />
             {open && query.trim() && (
-              <div className="globe-search-results">
+              <div className="globe-search-results" id="globe-search-results" role="listbox">
                 {results.length === 0 ? (
                   <div className="globe-search-empty">No cities match "{query}"</div>
                 ) : results.map((city, i) => {
@@ -832,6 +801,9 @@
                   return (
                     <div
                       key={city.name + city.tz}
+                      id={`globe-search-result-${i}`}
+                      role="option"
+                      aria-selected={i === activeIdx}
                       className={"globe-search-result" + (i === activeIdx ? " is-active" : "")}
                       onMouseEnter={() => setActiveIdx(i)}
                       onMouseDown={(e) => { e.preventDefault(); pick(city); }}

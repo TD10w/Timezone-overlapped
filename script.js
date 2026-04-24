@@ -29,6 +29,9 @@ let nextId = 0;
 let lastRenderedHour = -1;
 const localZone = { start: "09:00", end: "17:00", isHighlighted: true, timezone: "" };
 
+window.getTimezoneZones = getZonesSnapshot;
+window.removeZoneByTimezone = removeZoneByTimezone;
+
 // ─── City / country alias map ─────────────────────────────────────────────────
 const cityAliasMap = {
   // ── China ────────────────────────────────────────────────────────────────
@@ -403,11 +406,34 @@ function commitAddZone() {
 function addZone(timezone) {
   zones.push({ id: nextId++, timezone, start: "09:00", end: "17:00", isHighlighted: true });
   render();
+  notifyZoneChange();
 }
 
 function removeZone(id) {
   zones = zones.filter((z) => z.id !== id);
   render();
+  notifyZoneChange();
+}
+
+function removeZoneByTimezone(timezone) {
+  const zone = zones.find((z) => z.timezone === timezone);
+  if (zone) removeZone(zone.id);
+}
+
+function getZonesSnapshot() {
+  return zones.map(({ id, timezone, start, end, isHighlighted }) => ({
+    id,
+    timezone,
+    start,
+    end,
+    isHighlighted,
+  }));
+}
+
+function notifyZoneChange() {
+  window.dispatchEvent(new CustomEvent("timezone-zones-changed", {
+    detail: getZonesSnapshot(),
+  }));
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
@@ -443,10 +469,11 @@ function renderChips() {
     localChip.querySelector(".chip-toggle").className = `chip-toggle ${localZone.isHighlighted ? "is-on" : "is-off"}`;
     localChip.classList.toggle("is-dim", !localZone.isHighlighted);
     renderTimeline(); renderSummary();
+    notifyZoneChange();
   });
   const [ls, le] = localChip.querySelectorAll(".chip-range-input");
-  ls.addEventListener("change", () => { localZone.start = ls.value; renderTimeline(); renderSummary(); });
-  le.addEventListener("change", () => { localZone.end   = le.value; renderTimeline(); renderSummary(); });
+  ls.addEventListener("change", () => { localZone.start = ls.value; renderTimeline(); renderSummary(); notifyZoneChange(); });
+  le.addEventListener("change", () => { localZone.end   = le.value; renderTimeline(); renderSummary(); notifyZoneChange(); });
   zoneChipsEl.appendChild(localChip);
 
   // ── Per-zone chips ────────────────────────────────────────────────────────
@@ -480,14 +507,15 @@ function renderChips() {
       chip.classList.toggle("is-dim", !zone.isHighlighted);
       renderTimeline();
       renderSummary();
+      notifyZoneChange();
     });
 
     const [startInput, endInput] = chip.querySelectorAll(".chip-range-input");
     startInput.addEventListener("change", () => {
-      if (zone) { zone.start = startInput.value; renderTimeline(); renderSummary(); }
+      if (zone) { zone.start = startInput.value; renderTimeline(); renderSummary(); notifyZoneChange(); }
     });
     endInput.addEventListener("change", () => {
-      if (zone) { zone.end = endInput.value; renderTimeline(); renderSummary(); }
+      if (zone) { zone.end = endInput.value; renderTimeline(); renderSummary(); notifyZoneChange(); }
     });
 
     chip.querySelector(".chip-remove").addEventListener("click", () => removeZone(id));
@@ -615,12 +643,12 @@ function tick() {
 // ─── Overlap calculation ──────────────────────────────────────────────────────
 function getZoneAvailCols(zone, localMidnight) {
   if (!zone.isHighlighted) return new Set();
-  const [sh] = zone.start.split(":").map(Number);
-  const [eh] = zone.end.split(":").map(Number);
+  const startMin = parseTimeToMinutes(zone.start);
+  const endMin = parseTimeToMinutes(zone.end);
   const cols = new Set();
   for (let h = 0; h < 24; h++) {
     const colUtc = localMidnight + h * HOUR_MS;
-    if (isInWorkWindow(getHourInZone(colUtc, zone.timezone), sh, eh)) cols.add(h);
+    if (isInWorkWindow(getHourInZone(colUtc, zone.timezone), startMin, endMin)) cols.add(h);
   }
   return cols;
 }
@@ -636,9 +664,9 @@ function getOverlapCols(localMidnight) {
   for (let h = 0; h < 24; h++) {
     const colUtc = localMidnight + h * HOUR_MS;
     if (participants.every(({ timezone, start, end }) => {
-      const [sh] = start.split(":").map(Number);
-      const [eh] = end.split(":").map(Number);
-      return isInWorkWindow(getHourInZone(colUtc, timezone), sh, eh);
+      const startMin = parseTimeToMinutes(start);
+      const endMin = parseTimeToMinutes(end);
+      return isInWorkWindow(getHourInZone(colUtc, timezone), startMin, endMin);
     })) {
       cols.add(h);
     }
@@ -646,9 +674,16 @@ function getOverlapCols(localMidnight) {
   return cols;
 }
 
-function isInWorkWindow(hour, startH, endH) {
-  if (startH <= endH) return hour >= startH && hour <= endH;
-  return hour >= startH || hour <= endH; // overnight window (e.g. 20:00–08:00)
+function parseTimeToMinutes(timeValue) {
+  const [hours, minutes = 0] = timeValue.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function isInWorkWindow(hour, startMin, endMin) {
+  if (startMin === endMin) return false;
+  const hourMin = hour * 60;
+  if (startMin < endMin) return hourMin >= startMin && hourMin < endMin;
+  return hourMin >= startMin || hourMin < endMin; // overnight window (e.g. 20:00–08:00)
 }
 
 function getHourSegments(hoursSet) {

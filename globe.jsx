@@ -118,14 +118,15 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
   const radius = size / 2 - 14;
   const cx = size / 2;
   const cy = size / 2;
+  const defaultPhi = -25;
 
   const [rotation, setRotation] = useState(() => {
     if (rotationMode === "centered") {
       // Rough center on local tz: use Date offset in minutes
       const offsetMin = new Date().getTimezoneOffset();
-      return { lambda: -(offsetMin / 4), phi: -20 };
+      return { lambda: -(offsetMin / 4), phi: defaultPhi - 5 };
     }
-    return { lambda: 0, phi: -15 };
+    return { lambda: 0, phi: defaultPhi };
   });
   const [now, setNow] = useState(() => new Date());
   const [hoverCoord, setHoverCoord] = useState(null);
@@ -292,6 +293,27 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
     deferSpinResume(2000);
   };
   const onPointerLeave = () => { hoverRef.current = false; setHoverCoord(null); setHoverPx(null); };
+  const onKeyDown = (e) => {
+    const rotationStep = 10;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault();
+      deferSpinResume(2000);
+      setRotation((r) => ({
+        lambda: r.lambda + (e.key === "ArrowLeft" ? rotationStep : e.key === "ArrowRight" ? -rotationStep : 0),
+        phi: Math.max(-85, Math.min(85, r.phi + (e.key === "ArrowUp" ? rotationStep : e.key === "ArrowDown" ? -rotationStep : 0))),
+      }));
+      return;
+    }
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      const c = unproject(cx, cy, rotation, radius, cx, cy);
+      const city = c ? nearestCity(c.lat, c.lon) : null;
+      if (city && onPin) {
+        onPin(city);
+        deferSpinResume(2000);
+      }
+    }
+  };
 
   // Subsolar point & night hemisphere center
   const sub = useMemo(() => subsolarPoint(now), [now]);
@@ -365,16 +387,20 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
   const isDotted = style === "dotted";
 
   return (
-    <div className="globe-wrap" style={{ width: size, height: size }}>
+    <div className="globe-wrap" style={{ maxWidth: size }}>
       <svg
         ref={svgRef}
         width={size}
         height={size}
         viewBox={`0 0 ${size} ${size}`}
+        role="img"
+        aria-label="Interactive globe for choosing timezone pins"
+        tabIndex="0"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerLeave}
+        onKeyDown={onKeyDown}
         style={{ cursor: dragRef.current ? "grabbing" : "grab", touchAction: "none" }}
       >
         <defs>
