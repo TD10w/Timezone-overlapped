@@ -7,6 +7,7 @@ const liveDateEl       = document.querySelector("#live-date");
 const zoneChipsEl      = document.querySelector("#zone-chips");
 const timelineEl       = document.querySelector("#timeline-matrix");
 const summaryEl        = document.querySelector("#overlap-summary");
+const bestWindowEl     = document.querySelector("#best-window-card");
 const tzOptions        = document.querySelector("#timezone-options");
 const addZoneFeedbackEl = document.querySelector("#add-zone-feedback");
 const translateTimeEl  = document.querySelector("#translate-time");
@@ -17,6 +18,7 @@ const translateResults = document.querySelector("#translate-results");
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const HOUR_MS = 60 * 60 * 1000;
+const STATE_KEY = "timezone-overlap-state-v1";
 
 const DEFAULTS = [
   "America/New_York",
@@ -27,8 +29,10 @@ const timezoneIndex = [];
 let zones = []; // [{ id: number, timezone: string }]
 let nextId = 0;
 let lastRenderedHour = -1;
+let isRestoringState = false;
 const localZone = { start: "09:00", end: "17:00", isHighlighted: true, timezone: "" };
 
+window.addZone = addZone;
 window.getTimezoneZones = getZonesSnapshot;
 window.removeZoneByTimezone = removeZoneByTimezone;
 
@@ -363,12 +367,14 @@ const cityAliasMap = {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 populateTimezones();
 localZone.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-DEFAULTS.forEach((tz) => {
-  const supported = typeof Intl.supportedValuesOf === "function"
-    ? Intl.supportedValuesOf("timeZone")
-    : DEFAULTS;
-  if (supported.includes(tz)) addZone(tz);
-});
+const restoredState = restoreState();
+if (!restoredState) {
+  DEFAULTS.forEach((tz) => {
+    if (isSupportedTimezone(tz)) addZone(tz, { skipPersist: true });
+  });
+}
+render();
+notifyZoneChange();
 initTranslator();
 startClock();
 
@@ -403,10 +409,10 @@ function commitAddZone() {
 }
 
 // ─── Zone management ──────────────────────────────────────────────────────────
-function addZone(timezone) {
+function addZone(timezone, options = {}) {
   zones.push({ id: nextId++, timezone, start: "09:00", end: "17:00", isHighlighted: true });
   render();
-  notifyZoneChange();
+  notifyZoneChange(options);
 }
 
 function removeZone(id) {
@@ -430,15 +436,132 @@ function getZonesSnapshot() {
   }));
 }
 
-function notifyZoneChange() {
+function notifyZoneChange(options = {}) {
+  if (!options.skipPersist) persistState();
   window.dispatchEvent(new CustomEvent("timezone-zones-changed", {
     detail: getZonesSnapshot(),
   }));
 }
 
+function restoreState() {
+  const urlState = parseStateFromUrl();
+  const savedState = urlState || parseStateFromStorage();
+  if (!savedState) return false;
+
+  localZone.start = savedState.local.start;
+  localZone.end = savedState.local.end;
+  localZone.isHighlighted = savedState.local.isHighlighted;
+  zones = savedState.zones.map((zone) => ({ ...zone, id: nextId++ }));
+  return true;
+}
+
+function parseStateFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has("local") && !params.has("z")) return null;
+
+  const local = parseLocalState(params.get("local"));
+  const parsedZones = params.getAll("z")
+    .map((value) => parseZoneState(value))
+    .filter(Boolean)
+    .filter((zone, index, all) => all.findIndex((candidate) => candidate.timezone === zone.timezone) === index);
+
+  if (!local || parsedZones.length === 0) return null;
+  return { local, zones: parsedZones };
+}
+
+function parseLocalState(value) {
+  if (!value) return normalizeStoredZone({}, localZone.timezone);
+  const [start = "09:00", end = "17:00", highlighted = "1"] = value.split("~");
+  return normalizeStoredZone({
+    timezone: localZone.timezone,
+    start,
+    end,
+    isHighlighted: highlighted !== "0",
+  }, localZone.timezone);
+}
+
+function parseStateFromStorage() {
+  try {
+    const raw = localStorage.getItem(STATE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    const local = normalizeStoredZone(saved.local, localZone.timezone);
+    const parsedZones = Array.isArray(saved.zones)
+      ? saved.zones.map((zone) => normalizeStoredZone(zone)).filter(Boolean)
+      : [];
+    if (!local || parsedZones.length === 0) return null;
+    return { local, zones: parsedZones };
+  } catch {
+    return null;
+  }
+}
+
+function parseZoneState(value, fallbackTimezone = "") {
+  if (!value) return null;
+  const [timezone = fallbackTimezone, start = "09:00", end = "17:00", highlighted = "1"] = value.split("~");
+  return normalizeStoredZone({ timezone: timezone || fallbackTimezone, start, end, isHighlighted: highlighted !== "0" }, fallbackTimezone);
+}
+
+function normalizeStoredZone(zone, fallbackTimezone = "") {
+  const timezone = zone?.timezone || fallbackTimezone;
+  if (!timezone || !isSupportedTimezone(timezone)) return null;
+  return {
+    timezone,
+    start: isValidTime(zone.start) ? zone.start : "09:00",
+    end: isValidTime(zone.end) ? zone.end : "17:00",
+    isHighlighted: zone.isHighlighted !== false,
+  };
+}
+
+function persistState() {
+  try {
+    localStorage.setItem(STATE_KEY, JSON.stringify({
+      local: {
+        timezone: localZone.timezone,
+        start: localZone.start,
+        end: localZone.end,
+        isHighlighted: localZone.isHighlighted,
+      },
+      zones: getZonesSnapshot(),
+    }));
+  } catch {}
+}
+
+function buildShareUrl() {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("local", serializeLocalState(localZone));
+  zones.forEach((zone) => url.searchParams.append("z", serializeZoneState(zone)));
+  return url.toString();
+}
+
+function serializeLocalState(zone) {
+  return `${zone.start}~${zone.end}~${zone.isHighlighted ? "1" : "0"}`;
+}
+
+function serializeZoneState(zone) {
+  return `${zone.timezone}~${zone.start}~${zone.end}~${zone.isHighlighted ? "1" : "0"}`;
+}
+
+function isValidTime(value) {
+  return /^\d{2}:\d{2}$/.test(value || "");
+}
+
+function isSupportedTimezone(timezone) {
+  if (timezoneIndex.some((entry) => entry.timeZone === timezone)) return true;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ─── Render ───────────────────────────────────────────────────────────────────
 function render() {
   renderChips();
+  renderBestWindow();
   renderTimeline();
   renderSummary();
   renderTranslation();
@@ -468,12 +591,12 @@ function renderChips() {
     localZone.isHighlighted = !localZone.isHighlighted;
     localChip.querySelector(".chip-toggle").className = `chip-toggle ${localZone.isHighlighted ? "is-on" : "is-off"}`;
     localChip.classList.toggle("is-dim", !localZone.isHighlighted);
-    renderTimeline(); renderSummary();
+    renderBestWindow(); renderTimeline(); renderSummary();
     notifyZoneChange();
   });
   const [ls, le] = localChip.querySelectorAll(".chip-range-input");
-  ls.addEventListener("change", () => { localZone.start = ls.value; renderTimeline(); renderSummary(); notifyZoneChange(); });
-  le.addEventListener("change", () => { localZone.end   = le.value; renderTimeline(); renderSummary(); notifyZoneChange(); });
+  ls.addEventListener("change", () => { localZone.start = ls.value; renderBestWindow(); renderTimeline(); renderSummary(); notifyZoneChange(); });
+  le.addEventListener("change", () => { localZone.end   = le.value; renderBestWindow(); renderTimeline(); renderSummary(); notifyZoneChange(); });
   zoneChipsEl.appendChild(localChip);
 
   // ── Per-zone chips ────────────────────────────────────────────────────────
@@ -505,6 +628,7 @@ function renderChips() {
       zone.isHighlighted = !zone.isHighlighted;
       chip.querySelector(".chip-toggle").className = `chip-toggle ${zone.isHighlighted ? "is-on" : "is-off"}`;
       chip.classList.toggle("is-dim", !zone.isHighlighted);
+      renderBestWindow();
       renderTimeline();
       renderSummary();
       notifyZoneChange();
@@ -512,14 +636,123 @@ function renderChips() {
 
     const [startInput, endInput] = chip.querySelectorAll(".chip-range-input");
     startInput.addEventListener("change", () => {
-      if (zone) { zone.start = startInput.value; renderTimeline(); renderSummary(); notifyZoneChange(); }
+      if (zone) { zone.start = startInput.value; renderBestWindow(); renderTimeline(); renderSummary(); notifyZoneChange(); }
     });
     endInput.addEventListener("change", () => {
-      if (zone) { zone.end = endInput.value; renderTimeline(); renderSummary(); notifyZoneChange(); }
+      if (zone) { zone.end = endInput.value; renderBestWindow(); renderTimeline(); renderSummary(); notifyZoneChange(); }
     });
 
     chip.querySelector(".chip-remove").addEventListener("click", () => removeZone(id));
     zoneChipsEl.appendChild(chip);
+  });
+}
+
+function renderBestWindow() {
+  if (!bestWindowEl) return;
+
+  const participants = getHighlightedParticipants();
+  const localMidnight = getLocalMidnight();
+
+  if (participants.length < 2) {
+    bestWindowEl.innerHTML = `
+      <div class="best-window-kicker">Best meeting window</div>
+      <div class="best-window-main">Add or highlight at least two zones</div>
+      <p class="best-window-copy">Use the city field or globe pins to compare working hours.</p>
+      <div class="best-window-actions">
+        <button id="copy-share-link" class="share-link-button" type="button">Copy link</button>
+        <span id="share-link-status" class="share-link-status" aria-live="polite"></span>
+      </div>
+    `;
+    bindShareButton();
+    return;
+  }
+
+  const overlapCols = getOverlapCols(localMidnight);
+  const hasOverlap = overlapCols.size > 0;
+  const segments = hasOverlap ? getHourSegments(overlapCols) : getCompromiseSegments(participants, localMidnight);
+  const localRanges = formatSegmentsForZone(segments, localMidnight, localZone.timezone);
+  const zoneRows = participants.map(({ timezone, label }) => `
+    <span class="best-window-zone">
+      <strong>${label}</strong>
+      ${formatSegmentsForZone(segments, localMidnight, timezone)}
+    </span>
+  `).join("");
+
+  bestWindowEl.classList.toggle("is-compromise", !hasOverlap);
+  bestWindowEl.innerHTML = `
+    <div class="best-window-topline">
+      <span class="best-window-kicker">${hasOverlap ? "Best meeting window" : "Closest compromise"}</span>
+      <span class="best-window-badge">${hasOverlap ? `${overlapCols.size}h overlap` : "No shared work-hours overlap"}</span>
+    </div>
+    <div class="best-window-main">${localRanges} local time</div>
+    <p class="best-window-copy">${hasOverlap ? "Everyone highlighted is inside their selected work hours." : "This is the hour range with the most highlighted zones available."}</p>
+    <div class="best-window-zones">${zoneRows}</div>
+    <div class="best-window-actions">
+      <button id="copy-share-link" class="share-link-button" type="button">Copy link</button>
+      <span id="share-link-status" class="share-link-status" aria-live="polite"></span>
+    </div>
+  `;
+  bindShareButton();
+}
+
+function getHighlightedParticipants() {
+  return [
+    ...(localZone.isHighlighted ? [{ ...localZone, label: "Local" }] : []),
+    ...zones.filter((z) => z.isHighlighted).map((z) => ({ ...z, label: simplifyZoneLabel(z.timezone) })),
+  ];
+}
+
+function getCompromiseSegments(participants, localMidnight) {
+  let bestScore = 0;
+  const cols = new Set();
+  for (let h = 0; h < 24; h++) {
+    const colUtc = localMidnight + h * HOUR_MS;
+    const score = participants.reduce((count, { timezone, start, end }) => {
+      const startMin = parseTimeToMinutes(start);
+      const endMin = parseTimeToMinutes(end);
+      return count + (isInWorkWindow(getHourInZone(colUtc, timezone), startMin, endMin) ? 1 : 0);
+    }, 0);
+    if (score > bestScore) {
+      bestScore = score;
+      cols.clear();
+      cols.add(h);
+    } else if (score === bestScore && score > 0) {
+      cols.add(h);
+    }
+  }
+  const segments = getHourSegments(cols);
+  if (segments.length <= 1) return segments;
+
+  const localAvailCols = getZoneAvailCols(localZone, localMidnight);
+  return [segments.sort((a, b) => {
+    const bLocalHits = countSegmentHits(b, localAvailCols);
+    const aLocalHits = countSegmentHits(a, localAvailCols);
+    if (bLocalHits !== aLocalHits) return bLocalHits - aLocalHits;
+    return (b.end - b.start) - (a.end - a.start);
+  })[0]];
+}
+
+function countSegmentHits(segment, cols) {
+  let hits = 0;
+  for (let h = segment.start; h < segment.end; h++) {
+    if (cols.has(h % 24)) hits++;
+  }
+  return hits;
+}
+
+function bindShareButton() {
+  const button = document.querySelector("#copy-share-link");
+  const status = document.querySelector("#share-link-status");
+  if (!button) return;
+  button.addEventListener("click", async () => {
+    const shareUrl = buildShareUrl();
+    window.history.replaceState(null, "", shareUrl);
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      if (status) status.textContent = "Copied";
+    } catch {
+      if (status) status.textContent = "Link added to address bar";
+    }
   });
 }
 
@@ -574,10 +807,7 @@ function buildTimelineRow(label, timezone, availCols, localMidnight, overlapCols
 }
 
 function renderSummary() {
-  const participants = [
-    ...(localZone.isHighlighted ? [{ ...localZone, label: "Local" }] : []),
-    ...zones.filter((z) => z.isHighlighted).map((z) => ({ ...z, label: simplifyZoneLabel(z.timezone) })),
-  ];
+  const participants = getHighlightedParticipants();
   if (participants.length < 2) {
     summaryEl.innerHTML = "Enable highlights on at least two time zones (including Local) to see the overlap.";
     return;
@@ -587,7 +817,7 @@ function renderSummary() {
   const overlapCols = getOverlapCols(localMidnight);
 
   if (overlapCols.size === 0) {
-    summaryEl.innerHTML = "No overlap found across the selected time periods.";
+    summaryEl.innerHTML = "No shared work-hours overlap across the selected time periods. The card above shows the closest compromise.";
     return;
   }
 
@@ -635,6 +865,7 @@ function tick() {
   const h = now.getHours();
   if (h !== lastRenderedHour) {
     lastRenderedHour = h;
+    renderBestWindow();
     renderTimeline();
     renderSummary();
   }

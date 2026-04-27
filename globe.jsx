@@ -1,7 +1,7 @@
 // Globe component — orthographic projection, drag to rotate, auto-spin, click to pin.
 // Depends on: window.WORLD_POLYGONS, window.WORLD_CITIES
 
-const { useState, useEffect, useRef, useMemo, useCallback } = React;
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 
 // ── Orthographic projection helpers ─────────────────────────────────────────
 // rotation = { lambda, phi } in degrees. lambda = longitude offset, phi = latitude tilt.
@@ -598,3 +598,5 @@ function Globe({ size, pins, onPin, onUnpin, localTz, style, rotationMode, infoD
 
 window.Globe = Globe;
 window.__globeHelpers = { nearestCity, project, unproject };
+
+export default Globe;
