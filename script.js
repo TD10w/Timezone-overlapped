@@ -410,15 +410,19 @@ function commitAddZone() {
 
 // ─── Zone management ──────────────────────────────────────────────────────────
 function addZone(timezone, options = {}) {
-  zones.push({ id: nextId++, timezone, start: "09:00", end: "17:00", isHighlighted: true });
-  render();
-  notifyZoneChange(options);
+  preserveVisibleAnchor(() => {
+    zones.push({ id: nextId++, timezone, start: "09:00", end: "17:00", isHighlighted: true });
+    render();
+    notifyZoneChange(options);
+  });
 }
 
 function removeZone(id) {
-  zones = zones.filter((z) => z.id !== id);
-  render();
-  notifyZoneChange();
+  preserveVisibleAnchor(() => {
+    zones = zones.filter((z) => z.id !== id);
+    render();
+    notifyZoneChange();
+  });
 }
 
 function removeZoneByTimezone(timezone) {
@@ -441,6 +445,39 @@ function notifyZoneChange(options = {}) {
   window.dispatchEvent(new CustomEvent("timezone-zones-changed", {
     detail: getZonesSnapshot(),
   }));
+}
+
+function preserveVisibleAnchor(updateFn) {
+  const anchor = getStableViewportAnchor();
+  const beforeTop = anchor?.getBoundingClientRect().top ?? null;
+
+  updateFn();
+
+  if (!anchor || beforeTop === null) return;
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (!document.body.contains(anchor)) return;
+      const afterTop = anchor.getBoundingClientRect().top;
+      const delta = afterTop - beforeTop;
+      if (Math.abs(delta) > 1) window.scrollBy(0, delta);
+    });
+  });
+}
+
+function getStableViewportAnchor() {
+  const preferred = [".globe-stage", ".timeline-wrap", ".best-window-card", "#zone-chips"];
+  for (const selector of preferred) {
+    const el = document.querySelector(selector);
+    if (el && isMeaningfullyVisible(el)) return el;
+  }
+  return null;
+}
+
+function isMeaningfullyVisible(el) {
+  const rect = el.getBoundingClientRect();
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  return rect.bottom > 64 && rect.top < viewportHeight - 64;
 }
 
 function restoreState() {
